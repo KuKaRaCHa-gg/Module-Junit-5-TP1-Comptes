@@ -13,6 +13,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -163,57 +166,79 @@ class CompteTest {
     class Operations {
 
         /**
-         * Vérifie que le crédit augmente le solde.
+         * Vérifie que le crédit augmente le solde selon plusieurs montants.
+         * @param montant montant à créditer
+         * @param soldeAttendu solde attendu après crédit
          */
-        @Test
-        @DisplayName("Crédit")
-        void testCredit() {
-            compte1.crediter(500);
-            assertEquals(500, compte1.getSolde());
-
-            compte1.crediter(300);
-            assertEquals(800, compte1.getSolde());
+        @ParameterizedTest(name = "Crédit {0}€ -> solde {1}€")
+        @CsvSource({
+                "500, 500",
+                "300, 300",
+                "1200, 1200"
+        })
+        @DisplayName("Crédit paramétré")
+        void testCredit(double montant, double soldeAttendu) {
+            compte1.crediter(montant);
+            assertEquals(soldeAttendu, compte1.getSolde());
         }
 
         /**
-         * Vérifie que le débit diminue le solde.
+         * Vérifie que le débit diminue le solde selon plusieurs montants.
+         * @param debit montant à débiter
+         * @param soldeFinal solde attendu après débit
          */
-        @Test
-        @DisplayName("Débit")
-        void testDebit() {
+        @ParameterizedTest(name = "Débit {0}€ -> solde {1}€")
+        @CsvSource({
+                "300, 700",
+                "600, 400"
+        })
+        @DisplayName("Débit paramétré")
+        void testDebit(double debit, double soldeFinal) {
             compte1.crediter(1000);
-            compte1.debiter(300);
-            assertEquals(700, compte1.getSolde());
-
-            compte1.debiter(600);
-            assertEquals(100, compte1.getSolde());
+            compte1.debiter(debit);
+            assertEquals(soldeFinal, compte1.getSolde());
         }
 
         /**
          * Vérifie que le virement transfère l'argent entre deux comptes.
+         * @param montant montant du virement
+         * @param soldeSource solde attendu sur le compte source
+         * @param soldeDest solde attendu sur le compte destinataire
          */
-        @Test
-        @DisplayName("Virement")
-        void testVirement() {
+        @ParameterizedTest(name = "Virement {0}€ -> source {1}€, dest {2}€")
+        @CsvSource({
+                "200, 300, 200",
+                "150, 350, 150"
+        })
+        @DisplayName("Virement paramétré")
+        void testVirement(double montant, double soldeSource, double soldeDest) {
             compte1.crediter(500);
             Compte compte2 = new Compte(1002, personne2);
-
-            compte1.virement(200, compte2);
-
-            assertEquals(300, compte1.getSolde());
-            assertEquals(200, compte2.getSolde());
+            compte1.virement(montant, compte2);
+            assertEquals(soldeSource, compte1.getSolde());
+            assertEquals(soldeDest, compte2.getSolde());
         }
 
         /**
-         * Vérifie que les opérations rejettent les montants invalides.
+         * Vérifie que les crédits refusent les montants invalides.
+         * @param montant montant à créditer
          */
-        @Test
-        @DisplayName("Validation montants")
-        void testValidationMontants() {
-            assertThrows(IllegalArgumentException.class, () -> compte1.crediter(-100));
-            assertThrows(IllegalArgumentException.class, () -> compte1.crediter(0));
-            assertThrows(IllegalArgumentException.class, () -> compte1.debiter(0));
-            assertThrows(IllegalArgumentException.class, () -> compte1.debiter(-100));
+        @ParameterizedTest(name = "Crédit invalide {0}")
+        @ValueSource(doubles = {0, -100, -50.5})
+        @DisplayName("Validation montants crédit")
+        void testValidationMontantsCredit(double montant) {
+            assertThrows(IllegalArgumentException.class, () -> compte1.crediter(montant));
+        }
+
+        /**
+         * Vérifie que les débits refusent les montants invalides.
+         * @param montant montant à débiter
+         */
+        @ParameterizedTest(name = "Débit invalide {0}")
+        @ValueSource(doubles = {0, -100, -75.25})
+        @DisplayName("Validation montants débit")
+        void testValidationMontantsDebit(double montant) {
+            assertThrows(IllegalArgumentException.class, () -> compte1.debiter(montant));
         }
     }
 
@@ -249,30 +274,35 @@ class CompteTest {
 
         /**
          * Vérifie que le débit ne peut pas dépasser le découvert maximal.
+         * @param retrait montant tenté
          */
-        @Test
-        @DisplayName("Limite découvert")
-        void testLimiteDecouvert() {
-            assertThrows(IllegalArgumentException.class, () -> compte1.debiter(900));
-            assertThrows(IllegalArgumentException.class, () -> compte1.debiter(801));
+        @ParameterizedTest(name = "Débit refusé {0}€")
+        @ValueSource(doubles = {900, 801, 1200})
+        @DisplayName("Limite découvert paramétré")
+        void testLimiteDecouvert(double retrait) {
+            assertThrows(IllegalArgumentException.class, () -> compte1.debiter(retrait));
         }
 
         /**
-         * Vérifie que getDebitAutorise calcule correctement.
+         * Vérifie que getDebitAutorise calcule correctement selon le solde.
+         * @param soldeInitial solde à simuler
+         * @param debitAttendu résultat attendu du débit autorisé
          */
-        @Test
-        @DisplayName("Débit autorisé")
-        void testDebitAutorise() {
-            // Solde nul : 800 (découvert max)
-            assertEquals(800, compte1.getDebitAutorise());
-
-            // Solde positif : 1000 (débit max)
-            compte1.crediter(500);
-            assertEquals(1000, compte1.getDebitAutorise());
-
-            // Solde négatif : -500, débit autorisé = min(1000, -500+800) = 300
-            compte1.debiter(1000);
-            assertEquals(300, compte1.getDebitAutorise());
+        @ParameterizedTest(name = "Solde {0}€ -> débit autorisé {1}€")
+        @CsvSource({
+                "0, 800",
+                "500, 1000",
+                "-500, 300"
+        })
+        @DisplayName("Débit autorisé paramétré")
+        void testDebitAutorise(double soldeInitial, double debitAttendu) {
+            Compte compte = new Compte(2000, personne1);
+            if (soldeInitial > 0) {
+                compte.crediter(soldeInitial);
+            } else if (soldeInitial < 0) {
+                compte.debiter(-soldeInitial);
+            }
+            assertEquals(debitAttendu, compte.getDebitAutorise());
         }
     }
 
@@ -383,4 +413,3 @@ class CompteTest {
         }
     }
 }
-
